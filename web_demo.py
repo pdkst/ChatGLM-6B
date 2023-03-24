@@ -1,8 +1,10 @@
 from transformers import AutoModel, AutoTokenizer
 import gradio as gr
 
-tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True)
-model = AutoModel.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True).half().cuda()
+tokenizer = AutoTokenizer.from_pretrained(
+    "THUDM/chatglm-6b", trust_remote_code=True)
+model = AutoModel.from_pretrained(
+    "THUDM/chatglm-6b", trust_remote_code=True).half().quantize(4).cuda()
 model = model.eval()
 
 MAX_TURNS = 20
@@ -17,9 +19,11 @@ def predict(input, max_length, top_p, temperature, history=None):
         updates = []
         for query, response in history:
             updates.append(gr.update(visible=True, value="用户：" + query))
-            updates.append(gr.update(visible=True, value="ChatGLM-6B：" + response))
+            updates.append(
+                gr.update(visible=True, value="ChatGLM-6B：" + response))
         if len(updates) < MAX_BOXES:
-            updates = updates + [gr.Textbox.update(visible=False)] * (MAX_BOXES - len(updates))
+            updates = updates + \
+                [gr.Textbox.update(visible=False)] * (MAX_BOXES - len(updates))
         yield [history] + updates
 
 
@@ -37,9 +41,13 @@ with gr.Blocks() as demo:
             txt = gr.Textbox(show_label=False, placeholder="Enter text and press enter", lines=11).style(
                 container=False)
         with gr.Column(scale=1):
-            max_length = gr.Slider(0, 4096, value=2048, step=1.0, label="Maximum length", interactive=True)
-            top_p = gr.Slider(0, 1, value=0.7, step=0.01, label="Top P", interactive=True)
-            temperature = gr.Slider(0, 1, value=0.95, step=0.01, label="Temperature", interactive=True)
+            max_length = gr.Slider(
+                0, 4096, value=2048, step=1.0, label="Maximum length", interactive=True)
+            top_p = gr.Slider(0, 1, value=0.7, step=0.01,
+                              label="Top P", interactive=True)
+            temperature = gr.Slider(
+                0, 1, value=0.95, step=0.01, label="Temperature", interactive=True)
             button = gr.Button("Generate")
-    button.click(predict, [txt, max_length, top_p, temperature, state], [state] + text_boxes)
+    button.click(predict, [txt, max_length, top_p,
+                 temperature, state], [state] + text_boxes)
 demo.queue().launch(share=False, inbrowser=True)
