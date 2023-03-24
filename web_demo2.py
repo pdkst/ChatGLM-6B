@@ -11,8 +11,10 @@ st.set_page_config(
 
 @st.cache_resource
 def get_model():
-    tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True)
-    model = AutoModel.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True).half().cuda()
+    tokenizer = AutoTokenizer.from_pretrained(
+        "THUDM/chatglm-6b", trust_remote_code=True)
+    model = AutoModel.from_pretrained(
+        "THUDM/chatglm-6b", trust_remote_code=True).half().quantize(8).cuda()
     model = model.eval()
     return tokenizer, model
 
@@ -32,7 +34,8 @@ def predict(input, history=None):
                 message(query, avatar_style="big-smile", key=str(i) + "_user")
                 message(response, avatar_style="bottts", key=str(i))
 
-        message(input, avatar_style="big-smile", key=str(len(history)) + "_user")
+        message(input, avatar_style="big-smile",
+                key=str(len(history)) + "_user")
         st.write("AI正在回复:")
         with st.empty():
             for response, history in model.stream_chat(tokenizer, input, history):
@@ -46,8 +49,8 @@ container = st.container()
 
 # create a prompt text for the text generation
 prompt_text = st.text_area(label="用户命令输入",
-            height = 100,
-            placeholder="请在这儿输入您的命令")
+                           height=100,
+                           placeholder="请在这儿输入您的命令")
 
 
 if 'state' not in st.session_state:
@@ -56,4 +59,5 @@ if 'state' not in st.session_state:
 if st.button("发送", key="predict"):
     with st.spinner("AI正在思考，请稍等........"):
         # text generation
-        st.session_state["state"] = predict(prompt_text, st.session_state["state"])
+        st.session_state["state"] = predict(
+            prompt_text, st.session_state["state"])
