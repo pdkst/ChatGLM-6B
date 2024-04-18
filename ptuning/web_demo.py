@@ -1,10 +1,26 @@
-from transformers import AutoModel, AutoTokenizer
+import os, sys
+
 import gradio as gr
 import mdtex2html
 
-tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True)
-model = AutoModel.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True).half().cuda()
-model = model.eval()
+import torch
+import transformers
+from transformers import (
+    AutoConfig,
+    AutoModel,
+    AutoTokenizer,
+    AutoTokenizer,
+    DataCollatorForSeq2Seq,
+    HfArgumentParser,
+    Seq2SeqTrainingArguments,
+    set_seed,
+)
+
+from arguments import ModelArguments, DataTrainingArguments
+
+
+model = None
+tokenizer = None
 
 """Override Chatbot.postprocess"""
 
@@ -98,4 +114,53 @@ with gr.Blocks() as demo:
 
     emptyBtn.click(reset_state, outputs=[chatbot, history], show_progress=True)
 
-demo.queue().launch(share=False, inbrowser=True)
+
+
+def main():
+    global model, tokenizer
+
+    parser = HfArgumentParser((
+        ModelArguments))
+    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+        # If we pass only one argument to the script and it's the path to a json file,
+        # let's parse it to get our arguments.
+        model_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))[0]
+    else:
+        model_args = parser.parse_args_into_dataclasses()[0]
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path, trust_remote_code=True)
+    config = AutoConfig.from_pretrained(
+        model_args.model_name_or_path, trust_remote_code=True)
+
+    config.pre_seq_len = model_args.pre_seq_len
+    config.prefix_projection = model_args.prefix_projection
+
+    if model_args.ptuning_checkpoint is not None:
+        print(f"Loading prefix_encoder weight from {model_args.ptuning_checkpoint}")
+        model = AutoModel.from_pretrained(model_args.model_name_or_path, config=config, trust_remote_code=True)
+        prefix_state_dict = torch.load(os.path.join(model_args.ptuning_checkpoint, "pytorch_model.bin"))
+        new_prefix_state_dict = {}
+        for k, v in prefix_state_dict.items():
+            if k.startswith("transformer.prefix_encoder."):
+                new_prefix_state_dict[k[len("transformer.prefix_encoder."):]] = v
+        model.transformer.prefix_encoder.load_state_dict(new_prefix_state_dict)
+    else:
+        model = AutoModel.from_pretrained(model_args.model_name_or_path, config=config, trust_remote_code=True)
+
+    if model_args.quantization_bit is not None:
+        print(f"Quantized to {model_args.quantization_bit} bit")
+        model = model.quantize(model_args.quantization_bit)
+
+    if model_args.pre_seq_len is not None:
+        # P-tuning v2
+        model = model.half().cuda()
+        model.transformer.prefix_encoder.float().cuda()
+    
+    model = model.eval()
+    demo.queue().launch(share=False, inbrowser=True)
+
+
+
+if __name__ == "__main__":
+    main()
